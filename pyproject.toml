@@ -1,0 +1,28 @@
+[project]
+name = "python_clang"
+version = "0.0.0"
+description = "Python module to interface clang"
+authors = [
+    "James Peach <james_peach01@hotmail.co.uk>"
+]
+license = "MIT"
+readme = "README.md"
+python = "^3.8"
+homepage = "https://github.com/jameswp/python_clang"
+repository = "https://github.com/jameswp/python_clang"
+documentation = "https://github.com/jameswp/python_clang"
+
+keywords = []
+
+classifiers = []
+
+# Requirements
+[dependencies]
+
+[build-system]
+requires = [
+    "setuptools >= 35.0.2",
+    "setuptools_scm >= 2.0.0, <3"
+]
+build-backend = "setuptools.build_meta"
+
