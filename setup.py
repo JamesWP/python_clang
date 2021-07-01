@@ -4,76 +4,51 @@ import os
 import subprocess
 import sys
 import platform
+import pathlib
 
 
 class CMakeExtension(Extension):
-    def __init__(self, name, cmake_lists_dir=".", **kwa):
-        Extension.__init__(self, name, sources=[], **kwa)
-        self.cmake_lists_dir = os.path.abspath(cmake_lists_dir)
+    def __init__(self, name):
+        super().__init__(name, sources=[])
 
 
 class cmake_build_ext(build_ext):
-    def build_extensions(self):
-        # Ensure that CMake is present and working
-        try:
-            out = subprocess.check_output(["cmake", "--version"])
-        except OSError:
-            raise RuntimeError("Cannot find CMake executable")
 
+    def run(self):
         for ext in self.extensions:
+            self.build_cmake(ext)
+        super().run()
 
-            extdir = os.path.abspath(os.path.dirname(self.get_ext_fullpath(ext.name)))
-            cfg = "Debug" if self.debug else "Release"
+    def build_cmake(self, ext):
+        cwd = pathlib.Path().absolute()
 
-            cmake_args = [
-                "-DCMAKE_BUILD_TYPE=%s" % cfg,
-                # Ask CMake to place the resulting library in the directory
-                # containing the extension
-                "-DCMAKE_LIBRARY_OUTPUT_DIRECTORY_{}={}".format(cfg.upper(), extdir),
-                # Other intermediate static libraries are placed in a
-                # temporary build directory instead
-                "-DCMAKE_ARCHIVE_OUTPUT_DIRECTORY_{}={}".format(
-                    cfg.upper(), self.build_temp
-                ),
-                # Hint CMake to use the same Python executable that
-                # is launching the build, prevents possible mismatching if
-                # multiple versions of Python are installed
-                "-DPYTHON_EXECUTABLE={}".format(sys.executable),
-                # Add other project-specific CMake arguments if needed
-                # ...
-            ]
+        # these dirs will be created in build_py, so if you don't have
+        # any python sources to bundle, the dirs will be missing
+        build_temp = pathlib.Path(self.build_temp)
+        build_temp.mkdir(parents=True, exist_ok=True)
+        extdir = pathlib.Path(self.get_ext_fullpath(ext.name))
+        extdir.mkdir(parents=True, exist_ok=True)
 
-            # We can handle some platform-specific settings at our discretion
-            if platform.system() == "Windows":
-                plat = "x64" if platform.architecture()[0] == "64bit" else "Win32"
-                cmake_args += [
-                    # These options are likely to be needed under Windows
-                    "-DCMAKE_WINDOWS_EXPORT_ALL_SYMBOLS=TRUE",
-                    "-DCMAKE_RUNTIME_OUTPUT_DIRECTORY_{}={}".format(
-                        cfg.upper(), extdir
-                    ),
-                ]
-                # Assuming that Visual Studio and MinGW are supported compilers
-                if self.compiler.compiler_type == "msvc":
-                    cmake_args += ["-DCMAKE_GENERATOR_PLATFORM=%s" % plat]
-                else:
-                    cmake_args += ["-G", "MinGW Makefiles"]
+        # example of cmake args
+        config = 'Debug' if self.debug else 'Release'
+        cmake_args = [
+            '-DCMAKE_LIBRARY_OUTPUT_DIRECTORY=' + str(extdir.parent.absolute()),
+            '-DCMAKE_BUILD_TYPE=' + config
+        ]
 
-            #cmake_args += cmake_cmd_args
+        # example of build args
+        build_args = [
+            '--config', config,
+            '--', '-j4'
+        ]
 
-            if not os.path.exists(self.build_temp):
-                os.makedirs(self.build_temp)
-
-            # Config
-            subprocess.check_call(
-                ["cmake", ext.cmake_lists_dir] + cmake_args, cwd=self.build_temp
-            )
-
-            # Build
-            subprocess.check_call(
-                ["cmake", "--build", ".", "--config", cfg], cwd=self.build_temp
-            )
-
+        os.chdir(str(build_temp))
+        self.spawn(['cmake', str(cwd)] + cmake_args)
+        if not self.dry_run:
+            self.spawn(['cmake', '--build', '.'] + build_args)
+        # Troubleshooting: if fail on line above then delete all possible 
+        # temporary CMake files including "CMakeCache.txt" in top level dir.
+        os.chdir(str(cwd))
 
 setup(
     name="python_clang",
