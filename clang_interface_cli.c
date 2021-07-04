@@ -28,7 +28,7 @@ int main(int argc, char *argv[])
 
   int num = 10;
 
-  rc = snprintf(code_buff, BUFF_SIZE, "int go() { return %d; }", num);
+  rc = snprintf(code_buff, BUFF_SIZE, "static int a = %d; int go() { return a++; }", num);
 
   assert(rc > 0);
 
@@ -51,6 +51,15 @@ int main(int argc, char *argv[])
   }
 
   printf("Code executed. output=%d\n", output);
+
+  if (0 != (rc = runCode(&handle, &output)))
+  {
+    printf("Error executing code. rc=%d\n", rc);
+    goto exit_and_destroy;
+  }
+
+  printf("Code executed. output=%d\n", output);
+
 
 exit_and_destroy:
   fin();

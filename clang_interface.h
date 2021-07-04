@@ -13,6 +13,7 @@ int test();
 
 struct EnvironmentHandle {
     void* handle;
+    int (*compiledFunctionHandle)();
 };
 
 typedef struct EnvironmentHandle EnvironmentHandle;

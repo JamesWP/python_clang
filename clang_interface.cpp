@@ -9,6 +9,7 @@
 #include "clang/Frontend/CompilerInvocation.h"
 #include "clang/Frontend/FrontendDiagnostic.h"
 #include "clang/Frontend/TextDiagnosticPrinter.h"
+#include "clang/Lex/PreprocessorOptions.h"
 #include "llvm/ADT/SmallString.h"
 #include "llvm/ExecutionEngine/ExecutionEngine.h"
 #include "llvm/ExecutionEngine/Orc/CompileUtils.h"
@@ -26,6 +27,8 @@
 #include "llvm/Support/TargetSelect.h"
 #include "llvm/Support/raw_ostream.h"
 #include "llvm/Target/TargetMachine.h"
+
+#include <iostream>
 
 using namespace clang;
 using namespace clang::driver;
@@ -118,8 +121,6 @@ namespace llvm
   } // end namespace orc
 } // end namespace llvm
 
-llvm::ExitOnError ExitOnErr;
-
 int test()
 {
   // This just needs to be some symbol in the binary; C++ doesn't
@@ -140,8 +141,6 @@ int test()
   if (T.isOSBinFormatCOFF())
     T.setObjectFormat(llvm::Triple::ELF);
 #endif
-
-  ExitOnErr.setBanner("clang interpreter");
 
   Driver TheDriver(Path, T.str(), Diags);
   TheDriver.setTitle("clang interpreter");
@@ -215,18 +214,43 @@ int test()
     return 1;
 
   init();
-  
+
   int Res = 255;
   std::unique_ptr<llvm::LLVMContext> Ctx(Act->takeLLVMContext());
   std::unique_ptr<llvm::Module> Module = Act->takeModule();
 
   if (Module)
   {
-    auto J = ExitOnErr(llvm::orc::SimpleJIT::Create());
+    auto J_ex = llvm::orc::SimpleJIT::Create();
 
-    ExitOnErr(J->addModule(
-        llvm::orc::ThreadSafeModule(std::move(Module), std::move(Ctx))));
-    auto Main = (int (*)(...))ExitOnErr(J->getSymbolAddress("main"));
+    if (auto err = J_ex.takeError())
+    {
+      printf("Unable to create jit\n");
+      return -1;
+    }
+
+    auto J = std::move(*J_ex);
+
+    auto add_ex = J->addModule(
+        llvm::orc::ThreadSafeModule(std::move(Module), std::move(Ctx)));
+
+    if (!add_ex)
+    {
+      printf("Unable to add module to jit\n");
+      return -1;
+    }
+
+    auto addr_ex = J->getSymbolAddress("main");
+
+    if (auto err = addr_ex.takeError())
+    {
+      printf("Unable to add module to jit\n");
+      return -1;
+    }
+
+    auto addr = *addr_ex;
+
+    auto Main = (int (*)(...))addr;
     Res = Main();
   }
 
@@ -242,7 +266,8 @@ int init()
   return 0;
 }
 
-int fin(){
+int fin()
+{
   llvm::llvm_shutdown();
   return 0;
 }
@@ -299,7 +324,118 @@ int compileCode(EnvironmentHandle *h, const char *code, size_t code_size)
     return 1;
   }
 
-  return 1;
+  llvm::ExitOnError ExitOnErr;
+
+  IntrusiveRefCntPtr<DiagnosticOptions> DiagOpts = new DiagnosticOptions();
+  TextDiagnosticPrinter *DiagClient =
+      new TextDiagnosticPrinter(llvm::errs(), &*DiagOpts);
+
+  IntrusiveRefCntPtr<DiagnosticIDs> DiagID(new DiagnosticIDs());
+  DiagnosticsEngine Diags(DiagID, &*DiagOpts, DiagClient);
+
+  const std::string TripleStr = llvm::sys::getProcessTriple();
+  llvm::Triple T(TripleStr);
+
+  ExitOnErr.setBanner("clang interpreter");
+
+  std::string Path = "/not/actually/clang";
+
+  Driver TheDriver(Path, T.str(), Diags);
+  TheDriver.setTitle("clang interpreter");
+  TheDriver.setCheckInputsExist(false);
+
+  std::cout << "Compiling going well" << std::endl;
+
+  SmallVector<const char *, 16> Args;
+  Args.push_back("clang-interpreter");
+  Args.push_back("test.c");
+  Args.push_back("-fsyntax-only");
+  Args.push_back("-v");
+  std::unique_ptr<Compilation> C(TheDriver.BuildCompilation(Args));
+  if (!C)
+  {
+    return 1;
+  }
+
+  std::cout << "Compiling going well" << std::endl;
+
+  const driver::JobList &Jobs = C->getJobs();
+  if (Jobs.size() != 1 || !isa<driver::Command>(*Jobs.begin()))
+  {
+    SmallString<256> Msg;
+    llvm::raw_svector_ostream OS(Msg);
+    Jobs.Print(OS, "; ", true);
+    Diags.Report(diag::err_fe_expected_compiler_job) << OS.str();
+    return 1;
+  }
+
+  std::cout << "Compiling going well" << std::endl;
+
+  driver::Command &Cmd = cast<driver::Command>(*Jobs.begin());
+
+  if (llvm::StringRef(Cmd.getCreator().getName()) != "clang")
+  {
+    Diags.Report(diag::err_fe_expected_clang_command);
+    return 1;
+  }
+
+  // Initialize a compiler invocation object from the clang (-cc1) arguments.
+  const llvm::opt::ArgStringList &CCArgs = Cmd.getArguments();
+  std::unique_ptr<CompilerInvocation> CI(new CompilerInvocation);
+  CompilerInvocation::CreateFromArgs(*CI, CCArgs, Diags);
+
+  // Map code filename to a memoryBuffer
+  llvm::StringRef testCodeData(code, code_size);
+  auto buffer = llvm::MemoryBuffer::getMemBufferCopy(testCodeData);
+  CI->getPreprocessorOpts().addRemappedFile("test.c", buffer.release());
+
+  // Show the invocation, with -v.
+  if (CI->getHeaderSearchOpts().Verbose)
+  {
+    llvm::errs() << "clang invocation:\n";
+    Jobs.Print(llvm::errs(), "\n", true);
+    llvm::errs() << "\n";
+  }
+
+  // Create a compiler instance to handle the actual work.
+  CompilerInstance Clang;
+  Clang.setInvocation(std::move(CI));
+
+  // Create the compilers actual diagnostics engine.
+  Clang.createDiagnostics();
+  if (!Clang.hasDiagnostics())
+  {
+    return 1;
+  }
+
+  std::cout << "Compiling going well" << std::endl;
+
+  // Create and execute the frontend to generate an LLVM bitcode module.
+  std::unique_ptr<CodeGenAction> Act(new EmitLLVMOnlyAction());
+  if (!Clang.ExecuteAction(*Act))
+  {
+    return 1;
+  }
+
+  std::cout << "Compiling going well" << std::endl;
+
+  int Res = 255;
+  std::unique_ptr<llvm::LLVMContext> Ctx(Act->takeLLVMContext());
+  std::unique_ptr<llvm::Module> Module = Act->takeModule();
+
+  auto *J = reinterpret_cast<llvm::orc::SimpleJIT *>(h->handle);
+
+  if (Module)
+  {
+    ExitOnErr(J->addModule(
+        llvm::orc::ThreadSafeModule(std::move(Module), std::move(Ctx))));
+  }
+
+  auto Main = (int (*)())ExitOnErr(J->getSymbolAddress("go"));
+
+  h->compiledFunctionHandle = Main;
+
+  return 0;
 }
 
 int runCode(EnvironmentHandle *h, int *output)
@@ -309,5 +445,12 @@ int runCode(EnvironmentHandle *h, int *output)
     return 1;
   }
 
-  return 1;
+  int value = h->compiledFunctionHandle();
+
+  if (output != nullptr)
+  {
+    *output = value;
+  }
+
+  return 0;
 }

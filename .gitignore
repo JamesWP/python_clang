@@ -2,3 +2,7 @@
 *.o
 *.egg-info
 __pycache__
+build*
+env
+setup.log
+*.egg

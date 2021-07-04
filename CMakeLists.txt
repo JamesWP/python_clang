@@ -13,6 +13,7 @@ add_library(clang_interface clang_interface.cpp)
 target_link_libraries(clang_interface PUBLIC ${CLANG_LIBS} ${CLANG_LIBS} ${LLVM_LIBS} "-Wl,/usr/lib/llvm-10/lib/LLVMPolly.so")
 target_include_directories(clang_interface PRIVATE ${CLANG_INCLUDE_DIRS} ${LLVM_INCLUDE_DIRS})
 target_include_directories(clang_interface PUBLIC ${CMAKE_SOURCE_DIR})
+set_property(TARGET clang_interface PROPERTY POSITION_INDEPENDENT_CODE ON)
 
 # PYTHON INTERFACE SHARED LIBRARY
 add_library(python_clang SHARED python_clang_module.c)
@@ -24,7 +25,7 @@ set_target_properties(
         LINKER_LANGUAGE C
     )
 target_include_directories(python_clang PUBLIC ${PYTHON_INCLUDE_DIRS})
-target_link_libraries(python_clang PUBLIC ${PYTHON_LIBRARIES})
+target_link_libraries(python_clang PUBLIC ${PYTHON_LIBRARIES} clang_interface)
 
 # TEST CLI
 add_executable(clang_interface_cli clang_interface_cli.c)
