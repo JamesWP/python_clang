@@ -121,158 +121,20 @@ namespace llvm
   } // end namespace orc
 } // end namespace llvm
 
-int test()
-{
-  // This just needs to be some symbol in the binary; C++ doesn't
-  // allow taking the address of ::main however.
-  std::string Path = "/not/actually/clang";
-  IntrusiveRefCntPtr<DiagnosticOptions> DiagOpts = new DiagnosticOptions();
-  TextDiagnosticPrinter *DiagClient =
-      new TextDiagnosticPrinter(llvm::errs(), &*DiagOpts);
-
-  IntrusiveRefCntPtr<DiagnosticIDs> DiagID(new DiagnosticIDs());
-  DiagnosticsEngine Diags(DiagID, &*DiagOpts, DiagClient);
-
-  const std::string TripleStr = llvm::sys::getProcessTriple();
-  llvm::Triple T(TripleStr);
-
-  // Use ELF on Windows-32 and MingW for now.
-#ifndef CLANG_INTERPRETER_COFF_FORMAT
-  if (T.isOSBinFormatCOFF())
-    T.setObjectFormat(llvm::Triple::ELF);
-#endif
-
-  Driver TheDriver(Path, T.str(), Diags);
-  TheDriver.setTitle("clang interpreter");
-  TheDriver.setCheckInputsExist(false);
-
-  // FIXME: This is a hack to try to force the driver to do something we can
-  // recognize. We need to extend the driver library to support this use model
-  // (basically, exactly one input, and the operation mode is hard wired).
-  SmallVector<const char *, 16> Args;
-  Args.push_back("-fsyntax-only");
-  std::unique_ptr<Compilation> C(TheDriver.BuildCompilation(Args));
-  if (!C)
-    return 0;
-
-  // FIXME: This is copied from ASTUnit.cpp; simplify and eliminate.
-
-  // We expect to get back exactly one command job, if we didn't something
-  // failed. Extract that job from the compilation.
-  const driver::JobList &Jobs = C->getJobs();
-  if (Jobs.size() != 1 || !isa<driver::Command>(*Jobs.begin()))
-  {
-    SmallString<256> Msg;
-    llvm::raw_svector_ostream OS(Msg);
-    Jobs.Print(OS, "; ", true);
-    Diags.Report(diag::err_fe_expected_compiler_job) << OS.str();
-    return 1;
-  }
-
-  const driver::Command &Cmd = cast<driver::Command>(*Jobs.begin());
-  if (llvm::StringRef(Cmd.getCreator().getName()) != "clang")
-  {
-    Diags.Report(diag::err_fe_expected_clang_command);
-    return 1;
-  }
-
-  // Initialize a compiler invocation object from the clang (-cc1) arguments.
-  const llvm::opt::ArgStringList &CCArgs = Cmd.getArguments();
-  std::unique_ptr<CompilerInvocation> CI(new CompilerInvocation);
-  CompilerInvocation::CreateFromArgs(*CI, CCArgs, Diags);
-
-  // Show the invocation, with -v.
-  if (CI->getHeaderSearchOpts().Verbose)
-  {
-    llvm::errs() << "clang invocation:\n";
-    Jobs.Print(llvm::errs(), "\n", true);
-    llvm::errs() << "\n";
-  }
-
-  // FIXME: This is copied from cc1_main.cpp; simplify and eliminate.
-
-  // Create a compiler instance to handle the actual work.
-  CompilerInstance Clang;
-  Clang.setInvocation(std::move(CI));
-
-  // Create the compilers actual diagnostics engine.
-  Clang.createDiagnostics();
-  if (!Clang.hasDiagnostics())
-    return 1;
-
-#if 0
-  // Infer the builtin include path if unspecified.
-  if (Clang.getHeaderSearchOpts().UseBuiltinIncludes &&
-      Clang.getHeaderSearchOpts().ResourceDir.empty())
-    Clang.getHeaderSearchOpts().ResourceDir =
-      CompilerInvocation::GetResourcesPath(argv[0], MainAddr);
-#endif
-
-  // Create and execute the frontend to generate an LLVM bitcode module.
-  std::unique_ptr<CodeGenAction> Act(new EmitLLVMOnlyAction());
-  if (!Clang.ExecuteAction(*Act))
-    return 1;
-
-  init();
-
-  int Res = 255;
-  std::unique_ptr<llvm::LLVMContext> Ctx(Act->takeLLVMContext());
-  std::unique_ptr<llvm::Module> Module = Act->takeModule();
-
-  if (Module)
-  {
-    auto J_ex = llvm::orc::SimpleJIT::Create();
-
-    if (auto err = J_ex.takeError())
-    {
-      printf("Unable to create jit\n");
-      return -1;
-    }
-
-    auto J = std::move(*J_ex);
-
-    auto add_ex = J->addModule(
-        llvm::orc::ThreadSafeModule(std::move(Module), std::move(Ctx)));
-
-    if (!add_ex)
-    {
-      printf("Unable to add module to jit\n");
-      return -1;
-    }
-
-    auto addr_ex = J->getSymbolAddress("main");
-
-    if (auto err = addr_ex.takeError())
-    {
-      printf("Unable to add module to jit\n");
-      return -1;
-    }
-
-    auto addr = *addr_ex;
-
-    auto Main = (int (*)(...))addr;
-    Res = Main();
-  }
-
-  fin();
-
-  return Res;
-}
-
-int init()
+int clang_interface_init()
 {
   llvm::InitializeNativeTarget();
   llvm::InitializeNativeTargetAsmPrinter();
   return 0;
 }
 
-int fin()
+int clang_interface_fini()
 {
   llvm::llvm_shutdown();
   return 0;
 }
 
-int createEnvironment(EnvironmentHandle *h)
+int clang_interface_createEnvironment(clang_interface_EnvironmentHandle *h)
 {
   if (h == nullptr)
   {
@@ -296,7 +158,7 @@ int createEnvironment(EnvironmentHandle *h)
   return 0;
 }
 
-int destroyEnvironment(EnvironmentHandle *h)
+int clang_interface_destroyEnvironment(clang_interface_EnvironmentHandle *h)
 {
   if (h == nullptr)
   {
@@ -317,7 +179,7 @@ int destroyEnvironment(EnvironmentHandle *h)
   return 0;
 }
 
-int compileCode(EnvironmentHandle *h, const char *code, size_t code_size)
+int clang_interface_compileCode(clang_interface_EnvironmentHandle *h, const char *code, size_t code_size)
 {
   if (h == nullptr)
   {
@@ -438,7 +300,7 @@ int compileCode(EnvironmentHandle *h, const char *code, size_t code_size)
   return 0;
 }
 
-int runCode(EnvironmentHandle *h, int *output)
+int clang_interface_runCode(clang_interface_EnvironmentHandle *h, int *output)
 {
   if (h == nullptr)
   {

@@ -1,22 +1,28 @@
 import sys
+import importlib
+import pkg_resources
+import os
 
 native = "native" in sys.argv
-  
+local_shared = "local_shared" in sys.argv
 
 if native:
   # native module
   import python_clang
-
-  a = python_clang.Compiler()
+elif local_shared:
+  so = os.environ.get("PYTHON_CLANG_SO")
+  print(so)
+  spec = importlib.util.spec_from_file_location("python_clang", so)
+  python_clang = importlib.util.module_from_spec(spec)
 else:
   # python mock
-  import python_mock
+  python_clang = importlib.import_module("python_mock")
 
-  a = python_mock.Compiler()
+a = python_clang.Compiler()
 
-func = a.compile("1+2+3")
+func = a.compile("int go() { return 1+2+3; }")
 
-output = func()
+print("result of compile", func)
 
-
-print(output)
+#output = func()
+#print(output)

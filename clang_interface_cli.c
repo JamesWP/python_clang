@@ -10,17 +10,17 @@
 
 int main(int argc, char *argv[])
 {
-  init();
+  clang_interface_init();
 
-  EnvironmentHandle handle;
-  memset(&handle, '\0', sizeof(EnvironmentHandle));
+  clang_interface_EnvironmentHandle handle;
+  memset(&handle, '\0', sizeof(clang_interface_EnvironmentHandle));
 
   int rc = 0;
 
-  if (0 != (rc = createEnvironment(&handle)))
+  if (0 != (rc = clang_interface_createEnvironment(&handle)))
   {
     printf("Unable to create env. rc=%d\n", rc);
-    fin();
+    clang_interface_fini();
     return 1;
   }
 
@@ -37,14 +37,14 @@ int main(int argc, char *argv[])
   fwrite(code_buff, code_size, 1, stdout);
   printf("\n");
 
-  if (0 != (rc = compileCode(&handle, code_buff, code_size)))
+  if (0 != (rc = clang_interface_compileCode(&handle, code_buff, code_size)))
   {
     printf("Unable to compile code. rc=%d\n", rc);
     goto exit_and_destroy;
   }
 
   int output = 0;
-  if (0 != (rc = runCode(&handle, &output)))
+  if (0 != (rc = clang_interface_runCode(&handle, &output)))
   {
     printf("Error executing code. rc=%d\n", rc);
     goto exit_and_destroy;
@@ -52,7 +52,7 @@ int main(int argc, char *argv[])
 
   printf("Code executed. output=%d\n", output);
 
-  if (0 != (rc = runCode(&handle, &output)))
+  if (0 != (rc = clang_interface_runCode(&handle, &output)))
   {
     printf("Error executing code. rc=%d\n", rc);
     goto exit_and_destroy;
@@ -62,14 +62,15 @@ int main(int argc, char *argv[])
 
 
 exit_and_destroy:
-  fin();
   free(code_buff);
 
-  if (0 != (rc = destroyEnvironment(&handle)))
+  if (0 != (rc = clang_interface_destroyEnvironment(&handle)))
   {
     printf("Unable to destroy env. rc=%d\n", rc);
     return 1;
   }
+
+  clang_interface_fini();
 
   return 0;
 }
