@@ -2,6 +2,7 @@
 
 
 #include "python_clang_compiler.h"
+#include "python_clang_function.h"
 
 int python_clang_clear(PyObject *module);
 
@@ -33,6 +34,11 @@ PyMODINIT_FUNC PyInit_python_clang(void)
     return NULL;
   }
 
+  if(!add_function_to_module(m)) {
+    Py_DECREF(m);
+    return NULL;
+  }
+
   return m;
 }
 
@@ -40,6 +46,7 @@ int python_clang_clear(PyObject *module)
 {
   // TODO: test this is called
   remove_compiler_from_module(module);
+  remove_function_from_module(module);
   
   return 0;
 }

@@ -3,30 +3,14 @@
 
 #include "clang_interface.h"
 
+#include "python_clang_function.h"
+
 struct ClangCompiler
 {
     PyObject_HEAD;
     clang_interface_EnvironmentHandle handle;
     bool init;
 };
-
-static PyObject *
-ClangCompiler_new(PyTypeObject *type, PyObject *args, PyObject *kwds)
-{
-    struct ClangCompiler *self;
-
-    self = (struct ClangCompiler *)type->tp_alloc(type, 0);
-    if (self == NULL)
-    {
-        printf("ClangCompiler new unable to alloc\n");
-        return NULL;
-    }
-
-    memset(&self->handle, '\0', sizeof(self->handle));
-    self->init = false;
-
-    return (PyObject *)self;
-}
 
 static int ClangCompiler_init(PyObject *self, PyObject *args, PyObject *kwds)
 {
@@ -115,7 +99,7 @@ PyObject *ClangCompiler_compile(PyObject *self, PyObject *arg)
 
     printf("Yeee working\n");
 
-    return PyErr_Format(PyExc_NotImplementedError, "Not implemented yet");
+    return PyObject_CallFunctionObjArgs(FunctionType_p, self, NULL);
 }
 
 static PyMethodDef ClangCompiler_methods[] = {

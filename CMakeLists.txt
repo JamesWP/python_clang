@@ -17,7 +17,11 @@ target_include_directories(clang_interface PUBLIC ${CMAKE_SOURCE_DIR})
 set_property(TARGET clang_interface PROPERTY POSITION_INDEPENDENT_CODE ON)
 
 # PYTHON INTERFACE SHARED LIBRARY
-add_library(python_clang SHARED python_clang_module.c python_clang_compiler.c)
+add_library(python_clang SHARED 
+    python_clang_module.c 
+    python_clang_compiler.c 
+    python_clang_function.c
+    )
 set_target_properties(
     python_clang
     PROPERTIES

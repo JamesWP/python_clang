@@ -24,5 +24,8 @@ func = a.compile("int go() { return 1+2+3; }")
 
 print("result of compile", func)
 
-#output = func()
-#print(output)
+output = func()
+print(output)
+
+output = func()
+print(output)
