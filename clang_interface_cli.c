@@ -12,8 +12,8 @@ int main(int argc, char *argv[])
 {
   clang_interface_init();
 
-  clang_interface_EnvironmentHandle handle;
-  memset(&handle, '\0', sizeof(clang_interface_EnvironmentHandle));
+  clang_interface_EnvironmentHandle handle = {0};
+  clang_interface_FunctionHandle functionHandle = {0};
 
   int rc = 0;
 
@@ -37,14 +37,14 @@ int main(int argc, char *argv[])
   fwrite(code_buff, code_size, 1, stdout);
   printf("\n");
 
-  if (0 != (rc = clang_interface_compileCode(&handle, code_buff, code_size)))
+  if (0 != (rc = clang_interface_compileCode(&handle, &functionHandle, code_buff, code_size)))
   {
     printf("Unable to compile code. rc=%d\n", rc);
     goto exit_and_destroy;
   }
 
   int output = 0;
-  if (0 != (rc = clang_interface_runCode(&handle, &output)))
+  if (0 != (rc = clang_interface_runCode(&functionHandle, &output)))
   {
     printf("Error executing code. rc=%d\n", rc);
     goto exit_and_destroy;
@@ -52,7 +52,7 @@ int main(int argc, char *argv[])
 
   printf("Code executed. output=%d\n", output);
 
-  if (0 != (rc = clang_interface_runCode(&handle, &output)))
+  if (0 != (rc = clang_interface_runCode(&functionHandle, &output)))
   {
     printf("Error executing code. rc=%d\n", rc);
     goto exit_and_destroy;

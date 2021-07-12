@@ -1,27 +1,76 @@
 #include <Python.h>
 #include "python_clang_function.h"
+#include "clang_interface.h"
+#include <structmember.h>
 
-struct ClangFunction {
+struct ClangFunction
+{
     PyObject_HEAD;
+    clang_interface_FunctionHandle handle;
+    PyObject *compiler;
 };
+
+static void ClangFunction_dealloc(PyObject *self)
+{
+    printf("ClangFunction dealoc %p\n", (void *)self);
+    struct ClangFunction *function_object = (struct ClangFunction *)self;
+    Py_XDECREF(function_object->compiler);
+    Py_TYPE(self)->tp_free((PyObject *)self);
+}
 
 static int ClangFunction_init(PyObject *self, PyObject *args, PyObject *kwds)
 {
-    printf("ClangFunction init %p\n", (void*) self);
+    struct ClangFunction *function_object = (struct ClangFunction *)self;
+
+    printf("ClangFunction init %p\n", (void *)self);
+
+    PyObject *compiler = NULL;
+    PyObject *function = NULL;
+
+    static char *kwlist[] = {"compiler", "function", NULL};
+    if (!PyArg_ParseTupleAndKeywords(args, kwds, "OO", kwlist,
+                                     &compiler, &function))
+    {
+        return -1;
+    }
+
+    if (compiler)
+    {
+        PyObject *tmp = function_object->compiler;
+        Py_INCREF(compiler);
+        function_object->compiler = compiler;
+        Py_XDECREF(tmp);
+    }
+
+    if(function && PyCapsule_CheckExact(function) && PyCapsule_IsValid(function, NULL))
+    {
+        clang_interface_FunctionHandle* passed_function = (clang_interface_FunctionHandle*) PyCapsule_GetPointer(function, NULL);
+    
+        function_object->handle = *passed_function;
+    }
 
     return 0;
 }
 
-static void ClangFunction_dealloc(PyObject *self) 
-{
-    printf("ClangFunction dealoc %p\n", (void *)self);
-}
+static PyMemberDef ClangFunction_members[] = {
+    {"compiler", T_OBJECT_EX, offsetof(struct ClangFunction, compiler), 0,
+     "compiler"},
+    {NULL} /* Sentinel */
+};
 
 PyObject *ClangFunction_call(PyObject *self, PyObject *args, PyObject *kwargs)
 {
-    return PyErr_Format(PyExc_ValueError, "Unable to run code");
-}
+    struct ClangFunction *function_object = (struct ClangFunction *)self;
 
+    printf("ClangFunction call %p\n", (void *)self);
+
+    int output;
+    if(0 != clang_interface_runCode(&function_object->handle, &output)) {
+        return PyErr_Format(PyExc_ValueError, "Unable to run code");
+    }
+    
+    return PyLong_FromLong(output);
+}
 
 static PyTypeObject FunctionType = {
     PyVarObject_HEAD_INIT(NULL, 0)
@@ -34,11 +83,13 @@ static PyTypeObject FunctionType = {
     .tp_init = (initproc)ClangFunction_init,
     .tp_dealloc = (destructor)ClangFunction_dealloc,
     .tp_call = (ternaryfunc)ClangFunction_call,
+    .tp_members = ClangFunction_members,
 };
 
-PyObject* FunctionType_p = (PyObject*)&FunctionType;
+PyObject *FunctionType_p = (PyObject *)&FunctionType;
 
-bool add_function_to_module(PyObject *module) {
+bool add_function_to_module(PyObject *module)
+{
     assert(PyModule_Check(module));
 
     if (PyType_Ready(&FunctionType) < 0)
@@ -57,6 +108,7 @@ bool add_function_to_module(PyObject *module) {
     return true;
 }
 
-void remove_function_from_module(PyObject *module) {
+void remove_function_from_module(PyObject *module)
+{
     assert(PyModule_Check(module));
 }

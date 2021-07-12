@@ -179,10 +179,14 @@ int clang_interface_destroyEnvironment(clang_interface_EnvironmentHandle *h)
   return 0;
 }
 
-int clang_interface_compileCode(clang_interface_EnvironmentHandle *h, const char *code, size_t code_size)
+int clang_interface_compileCode(clang_interface_EnvironmentHandle *h, clang_interface_FunctionHandle *fh, const char *code, size_t code_size)
 {
-  if (h == nullptr)
+  if (h == nullptr || fh == nullptr)
   {
+    return 1;
+  }
+
+  if(fh->compiledFunctionHandle != nullptr) {
     return 1;
   }
 
@@ -295,12 +299,12 @@ int clang_interface_compileCode(clang_interface_EnvironmentHandle *h, const char
 
   auto Main = (int (*)())ExitOnErr(J->getSymbolAddress("go"));
 
-  h->compiledFunctionHandle = Main;
+  fh->compiledFunctionHandle = Main;
 
   return 0;
 }
 
-int clang_interface_runCode(clang_interface_EnvironmentHandle *h, int *output)
+int clang_interface_runCode(clang_interface_FunctionHandle *h, int *output)
 {
   if (h == nullptr)
   {

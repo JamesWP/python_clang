@@ -12,6 +12,8 @@ struct ClangCompiler
     bool init;
 };
 
+
+
 static int ClangCompiler_init(PyObject *self, PyObject *args, PyObject *kwds)
 {
     printf("ClangCompiler init %p\n", (void *)self);
@@ -83,14 +85,12 @@ PyObject *ClangCompiler_compile(PyObject *self, PyObject *arg)
 
     if (arg_code_str == NULL)
     {
-        Py_DecRef(arg);
         return PyErr_Format(PyExc_ValueError, "Unable to parse code");
     }
 
-    int rc = clang_interface_compileCode(&compiler_object->handle, arg_code_str, arg_code_size);
+    clang_interface_FunctionHandle function_handle = {0};
 
-    // Causes segfault??
-    //Py_DecRef(arg);
+    int rc = clang_interface_compileCode(&compiler_object->handle, &function_handle, arg_code_str, arg_code_size);
 
     if (rc != 0)
     {
@@ -99,7 +99,13 @@ PyObject *ClangCompiler_compile(PyObject *self, PyObject *arg)
 
     printf("Yeee working\n");
 
-    return PyObject_CallFunctionObjArgs(FunctionType_p, self, NULL);
+    PyObject *function_obj = PyCapsule_New(&function_handle, NULL, NULL);
+
+    PyObject *ret = PyObject_CallFunctionObjArgs(FunctionType_p, self, function_obj, NULL);
+
+    Py_DECREF(function_obj);
+    
+    return ret;
 }
 
 static PyMethodDef ClangCompiler_methods[] = {

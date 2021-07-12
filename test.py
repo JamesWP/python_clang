@@ -1,6 +1,5 @@
 import sys
 import importlib
-import pkg_resources
 import os
 
 native = "native" in sys.argv
@@ -14,18 +13,28 @@ elif local_shared:
   print(so)
   spec = importlib.util.spec_from_file_location("python_clang", so)
   python_clang = importlib.util.module_from_spec(spec)
-else:
-  # python mock
-  python_clang = importlib.import_module("python_mock")
 
-a = python_clang.Compiler()
+compiler = python_clang.Compiler()
 
-func = a.compile("int go() { return 1+2+3; }")
+print("compiler", compiler, hex(id(compiler)))
 
-print("result of compile", func)
+func = compiler.compile("""
+  int go() {
+    static int thing = 0;
+    return ++thing;
+  }
+""")
+
+print("function", func, hex(id(func)))
 
 output = func()
 print(output)
+assert output == 1
 
 output = func()
 print(output)
+assert output == 2
+
+output = func()
+print(output)
+assert output == 3
